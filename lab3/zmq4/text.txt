@@ -1,0 +1,4 @@
+Das ist ein einfacher Test . 
+Dieser Test soll Wörter zählen .
+Wörter wie Test und Wörter kommen mehrmals vor . 
+Das Ziel ist , die Häufigkeit der Wörter zu ermitteln .

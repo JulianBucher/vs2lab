@@ -11,6 +11,7 @@ import logging
 import sys
 import multiprocessing as mp
 
+import random
 import chordnode as chord_node
 import constChord
 from context import lab_channel, lab_logging
@@ -29,7 +30,43 @@ class DummyChordClient:
         self.channel.bind(self.node_id)
 
     def run(self):
-        print("Implement me pls...")
+        # Pick a random key to look up
+        key = random.randint(0, self.channel.MAXPROC - 1)
+        # Decode byte-strings returned by smembers into strings
+        nodes = [node.decode() for node in self.channel.channel.smembers('node')]
+        # Pick a random node to query
+        target_node = random.choice(nodes)
+        print(f"Send from{self.node_id}" )
+
+        # Send the LOOKUP_REQ to the target node
+        self.channel.send_to([target_node], (constChord.LOOKUP_REQ, key, self.node_id))
+        message = self.channel.receive_from_any()
+        print(f"Found on {self.node_id} and received value {key} message: {message}")
+
+        # Receive the result from the node
+        # while(True):
+        #     self.logger.info(f"Found and received value on {key:04n} message:{message}")
+
+        #     print(f"Found and received value on {key} message: {message}")
+
+        
+        # # Pick a random key to look up
+        # key = random.randint(0, self.channel.MAXPROC - 1)
+        # # Decode byte-strings returned by smembers into strings
+
+        # # Pick a random node to query
+        # target_node = random.choice(nodes)
+        
+        # # Send the LOOKUP_REQ to the target node
+        # self.channel.send_to([target_node], (constChord.LOOKUP_REQ, key))
+        
+        # # Receive the result from the node
+        # message = self.channel.receive_from_any()
+        # # print(f"Lookup for key {key} resolved to node {message[1]}")
+        # self.channel.send_to(  # a final multicast
+        #     {i.decode() for i in list(self.channel.channel.smembers('node'))},
+        #     constChord.STOP)
+        # print("Implement me pls...")
         self.channel.send_to(  # a final multicast
             {i.decode() for i in list(self.channel.channel.smembers('node'))},
             constChord.STOP)

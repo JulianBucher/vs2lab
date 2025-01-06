@@ -1,0 +1,21 @@
+3.1 
+1.Hello world wird drei Mal gesendet und empfangen
+2.  Der Server arbeitet zuerst alle Hello WOrld anfragen und danach alle Hello vs2lab
+    Hello world wird drei Mal gesendet und empfangen
+    Hello vslab* wird drei Mal gesendet und empfangen
+
+3.2
+    
+2.  Beide Clients erhalten die gleichen werte für Time.
+    Weil die Zeit nur alle 5s etc erneuert wird.
+
+    Der Server bearbeitet die Anfragen abwechselnd.
+    Die Clients fragen unterschiedliche Daten an(Date, Time)
+
+3.3
+
+1.  Die tsksource generieren die workload 100 und senden diese.
+    Der worker bearbeitet alle die aufgaben abwechselnd (soruce; 1,2,1,2...)
+
+2.  Die worker bearbeiten parallel die Workloads
+    Die verteilung ist ungefähr gerecht, allerdings ist die arbeitsdauer leicht unterschiedliche

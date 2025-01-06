@@ -77,7 +77,7 @@ Das Beispiel finden Sie hier:
 $ cd ~/git/vs2lab/lab2/rpyc
 $ ls -l
 -rw-r--r--  1 zirpins  staff  635 Oct 26 13:26 client.py
--rw-r--r--  1 zirpins  staff   34 Oct 25 20:21 constRPYC.py
+-rw-r--r--  1 zirpins  staff   34 Oct 25 20:21 constRPYC.pyll
 -rw-r--r--  1 zirpins  staff  385 Oct 30 09:38 context.py
 -rw-r--r--  1 zirpins  staff  583 Oct 26 13:26 server.py
 ```
