@@ -16,6 +16,19 @@ class Server:
     """ The server """
     _logger = logging.getLogger("vs2lab.lab1.clientserver.Server")
     _serving = True
+    telefon_db = { 'alice': 1234567,
+        'bob': 2345678,
+        'carol': 3456789
+    }
+    def handle_request(self, request):
+        """ Handle GET and GETALL requests """
+        if request.startswith("GET "):
+            name = str(request[4:]).lower()
+            return self.telefon_db[name]
+        elif request == "GETALL":
+            return str(self.telefon_db)
+        else:
+            return "Unbekannte Anfrage"
 
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -35,7 +48,12 @@ class Server:
                     data = connection.recv(1024)  # receive data from client
                     if not data:
                         break  # stop if client stopped
-                    connection.send(data + "*".encode('ascii'))  # return sent data plus an "*"
+                    self._logger.info("Sending data thorugh socket")
+                    request = data.decode('ascii')
+                    response = self.handle_request(request)
+                    connection.send(str(response).encode('ascii'))
+                    #connection.send(data.decode).encode('ascii')
+#                    connection.send(data + "*".encode('ascii'))  # return sent data plus an "*"
                 connection.close()  # close the connection
             except socket.timeout:
                 pass  # ignore timeouts
@@ -47,21 +65,31 @@ class Client:
     """ The client """
     logger = logging.getLogger("vs2lab.a1_layers.clientserver.Client")
 
+
+
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((const_cs.HOST, const_cs.PORT))
         self.logger.info("Client connected to socket " + str(self.sock))
 
-    def call(self, msg_in="Hello, world"):
+    def call(self, request):
         """ Call server """
-        self.sock.send(msg_in.encode('ascii'))  # send encoded string as data
+        self.sock.send(str(request).encode('ascii'))  # send encoded string as data
         data = self.sock.recv(1024)  # receive the response
-        msg_out = data.decode('ascii')
+        self.logger.info("receiving answer from socket")
+        msg_out = str(data.decode('ascii'))
         print(msg_out)  # print the result
         self.sock.close()  # close the connection
         self.logger.info("Client down.")
         return msg_out
 
+    def getall(self):
+        return self.call("GETALL")
+
+    def get(self, name):
+        return self.call(name)
+
     def close(self):
         """ Close socket """
+        self.logger.info("closing socket.")
         self.sock.close()

@@ -1,5 +1,4 @@
 import logging
-
 import rpc
 from context import lab_channel, lab_logging
 

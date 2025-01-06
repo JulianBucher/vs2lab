@@ -161,7 +161,7 @@ Das letzte Beispiel soll die Implementierung eines **Unit Test** in Python zeige
 
 ```bash
 cd ~/git/vs2lab/lab1
-pipenv run python test_clientserver.py
+¢pipenv run python test_clientserver.py
 ```
 
 Im Test wird ein Thread für die Ausführung des Servers verwendet. Näheres dazu folgt im nächsten Labor.

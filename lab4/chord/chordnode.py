@@ -134,6 +134,8 @@ class ChordNode:
     def run(self):
         while True:  # Start node operation loop
             message = self.channel.receive_from_any()  # Wait for any request
+            # if original_sender is None:
+            #     original_sender= self.node_id  # Identify the sender
             sender: str = message[0]  # Identify the sender
             request = message[1]  # And the actual request
 
@@ -146,17 +148,32 @@ class ChordNode:
                                   .format(self.node_id, int(sender)))
                 break
 
-            if request[0] == constChord.LOOKUP_REQ:  # A lookup request
-                self.logger.info("Node {:04n} received LOOKUP {:04n} from {:04n}."
-                                 .format(self.node_id, int(request[1]), int(sender)))
+            if request[0] == constChord.LOOKUP_REQ:  # Lookup request
+                key = int(request[1])
+                original_sender= int(request[2]) 
 
-                # look up and return local successor 
-                next_id: int = self.local_successor_node(request[1])
-                self.channel.send_to([sender], (constChord.LOOKUP_REP, next_id))
+                self.logger.info(f"Node {self.node_id:04n} received LOOKUP {key:04n} from {int(sender):04n}.")
 
-                # Finally do a sanity check
-                if not self.channel.exists(next_id):  # probe for existence
-                    self.delete_node(next_id)  # purge disappeared node
+            # Check if the current node is responsible for the key
+                next_id = self.local_successor_node(key)
+                if next_id == self.node_id:  # This node is responsible
+                    self.logger.info(f"Key {key:04n} resolved at Node {self.node_id:04n}.")
+                    self.channel.send_to([str(original_sender)], (constChord.LOOKUP_REP, self.node_id))
+                else:  # Forward the request to the next responsible node
+                    self.logger.debug(f"Forwarding LOOKUP {key:04n} to Node {next_id:04n}.")
+                    self.channel.send_to([str(next_id)], (constChord.LOOKUP_REQ, sender, original_sender) )
+
+            # if request[0] == constChord.LOOKUP_REQ:  # A lookup request
+            #     self.logger.info("Node {:04n} received LOOKUP {:04n} from {:04n}."
+            #                      .format(self.node_id, int(request[1]), int(sender)))
+
+            #     # look up and return local successor 
+            #     next_id: int = self.local_successor_node(request[1])
+            #     self.channel.send_to([sender], (constChord.LOOKUP_REP, next_id))
+
+            #     # Finally do a sanity check
+            #     if not self.channel.exists(next_id):  # probe for existence
+            #         self.delete_node(next_id)  # purge disappeared node
 
             elif request[0] == constChord.JOIN:
                 # Join request (the node was already registered above)
