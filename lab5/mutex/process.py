@@ -47,18 +47,38 @@ class Process:
         self.peer_type = 'unassigned'  # A flag indicating behavior pattern
         self.logger = logging.getLogger("vs2lab.lab5.mutex.process.Process")
 
+        self.failed_processes = set()
+        self.response_tracker = {}  # Track responses from peer
+
+    # detect crash after intervall
+    def __detect_crash(self):
+        # Remove any unresponsive peers from `other_processes`
+        for peer in self.other_processes:
+            if self.response_tracker.get(peer, 0) < self.clock - 3:  # Threshold for crash
+                self.logger.warning(f"Detected crash of {self.__mapid(peer)}")
+                self.failed_processes.add(peer)
+                # self.all_processes.remove(peer)
+                self.other_processes.remove(peer)
+
+                print(f" somesbit {self.failed_processes}")
+                print(f" someshit {self.other_processes}")
+
+
+
     def __mapid(self, id='-1'):
         # format channel member address
         if id == '-1':
             id = self.process_id
         return 'Proc-'+str(id)
 
+    
+
     def __cleanup_queue(self):
         if len(self.queue) > 0:
             # self.queue.sort(key = lambda tup: tup[0])
             self.queue.sort()
             # There should never be old ALLOW messages at the head of the queue
-            while self.queue[0][2] == ALLOW:
+            while self.queue and (self.queue[0][1] in self.failed_processes or self.queue[0][2] == ALLOW):
                 del (self.queue[0])
                 if len(self.queue) == 0:
                     break
@@ -85,51 +105,68 @@ class Process:
         self.clock = self.clock + 1  # Increment clock value
         msg = (self.clock, self.process_id, RELEASE)
         # Multicast release notification
-        self.channel.send_to(self.other_processes, msg)
-
+        # self.channel.send_to(self.other_processes, msg)
+        # Only send to processes not marked as failed
+        try:
+        # Only send to processes not marked as failed
+            active_processes = [p for p in self.other_processes if p not in self.failed_processes]
+            self.channel.send_to(active_processes, msg)
+        except Exception as e:
+            self.logger.error(f"Failed to send message: {e}")
+    
+    
     def __allowed_to_enter(self):
         # See who has sent a message (the set will hold at most one element per sender)
-        processes_with_later_message = set([req[1] for req in self.queue[1:]])
+        processes_with_later_message = set(
+            req[1] for req in self.queue[1:] if req[1] not in self.failed_processes)
         # Access granted if this process is first in queue and all others have answered (logically) later
         first_in_queue = self.queue[0][1] == self.process_id
-        all_have_answered = len(self.other_processes) == len(
-            processes_with_later_message)
+        all_have_answered = len(self.other_processes) == len(processes_with_later_message)
         return first_in_queue and all_have_answered
 
     def __receive(self):
-        # Pick up any message
-        _receive = self.channel.receive_from(self.other_processes, 3)
-        if _receive:
-            msg = _receive[1]
+        if self.other_processes:  # Check if other_processes is not empty
+            _receive = self.channel.receive_from(self.other_processes, 3)
 
-            self.clock = max(self.clock, msg[0])  # Adjust clock value...
-            self.clock = self.clock + 1  # ...and increment
+            if _receive:
+                msg = _receive[1]
+                sender = msg[1]
 
-            self.logger.debug("{} received {} from {}.".format(
-                self.__mapid(),
-                "ENTER" if msg[2] == ENTER
-                else "ALLOW" if msg[2] == ALLOW
-                else "RELEASE", self.__mapid(msg[1])))
+                self.response_tracker[sender] = self.clock  # Update the tracker
 
-            if msg[2] == ENTER:
-                self.queue.append(msg)  # Append an ENTER request
+                self.clock = max(self.clock, msg[0])  # Adjust clock value...
+                self.clock = self.clock + 1  # ...and increment
+
+                self.logger.debug(f"{self.__mapid()} received {msg[2]} from {self.__mapid(sender)}")
+     
+                if msg[2] == ENTER:
+                    self.queue.append(msg)  # Append an ENTER request
                 # and unconditionally allow (don't want to access CS oneself)
-                self.__allow_to_enter(msg[1])
-            elif msg[2] == ALLOW:
-                self.queue.append(msg)  # Append an ALLOW
-            elif msg[2] == RELEASE:
+                    self.__allow_to_enter(msg[1])
+                elif msg[2] == ALLOW:
+                    self.queue.append(msg)  # Append an ALLOW
+                elif msg[2] == RELEASE:
                 # assure release requester indeed has access (his ENTER is first in queue)
-                assert self.queue[0][1] == msg[1] and self.queue[0][2] == ENTER, 'State error: inconsistent remote RELEASE'
-                del (self.queue[0])  # Just remove first message
+                    assert self.queue[0][1] == msg[1] and self.queue[0][2] == ENTER, 'State error: inconsistent remote RELEASE'
+                    del (self.queue[0])  # Just remove first message
 
-            self.__cleanup_queue()  # Finally sort and cleanup the queue
+                self.__cleanup_queue()  # Finally sort and cleanup the queue
+            else:
+                self.__detect_crash()
+                self.logger.info(f"{self.__mapid()} timed out on RECEIVE. Local queue: {self.queue}")
+
         else:
-            self.logger.info("{} timed out on RECEIVE. Local queue: {}".
-                             format(self.__mapid(),
-                                    list(map(lambda msg: (
-                                        'Clock '+str(msg[0]),
-                                        self.__mapid(msg[1]),
-                                        msg[2]), self.queue))))
+        # Handle the case where there are no other processes
+        # You might want to sleep for a short time or do something else
+            time.sleep(1)  # Sleep for 1 second to avoid busy-waiting
+            self.logger.info(f"{self.__mapid()} no other processes to receive from.")
+
+            # self.logger.info("{} timed out on RECEIVE. Local queue: {}".
+            #                  format(self.__mapid(),
+            #                         list(map(lambda msg: (
+            #                             'Clock '+str(msg[0]),
+            #                             self.__mapid(msg[1]),
+            #                             msg[2]), self.queue))))
 
     def init(self, peer_name, peer_type):
         self.channel.bind(self.process_id)
@@ -138,8 +175,14 @@ class Process:
         # sort string elements by numerical order
         self.all_processes.sort(key=lambda x: int(x))
 
-        self.other_processes = list(self.channel.subgroup('proc'))
-        self.other_processes.remove(self.process_id)
+
+        self.other_processes = []
+        for proc in self.all_processes:
+            if proc != self.process_id:
+                if proc not in self.failed_processes:
+                    self.other_processes.append(proc)
+        # self.other_processes = list(self.channel.subgroup('proc'))
+        # self.other_processes.remove(self.process_id)
 
         self.peer_name = peer_name  # assign peer name
         self.peer_type = peer_type  # assign peer behavior
@@ -149,32 +192,46 @@ class Process:
 
     def run(self):
         while True:
-            # Enter the critical section if
-            # 1) there are more than one process left and
-            # 2) this peer has active behavior and
-            # 3) random is true
-            if len(self.all_processes) > 1 and \
-                    self.peer_type == ACTIVE and \
-                    random.choice([True, False]):
-                self.logger.debug("{} wants to ENTER CS at CLOCK {}."
-                                  .format(self.__mapid(), self.clock))
-
+            if len(self.all_processes) > 1 and self.peer_type == ACTIVE and random.choice([True, False]):
                 self.__request_to_enter()
                 while not self.__allowed_to_enter():
                     self.__receive()
-
-                # Stay in CS for some time ...
+            
                 sleep_time = random.randint(0, 2000)
-                self.logger.debug("{} enters CS for {} milliseconds."
-                                  .format(self.__mapid(), sleep_time))
-                print(" CS <- {}".format(self.__mapid()))
-                time.sleep(sleep_time/1000)
-
-                # ... then leave CS
-                print(" CS -> {}".format(self.__mapid()))
+                self.logger.debug(f"{self.__mapid()} enters CS for {sleep_time} milliseconds")
+                print(f" CS <- {self.__mapid()}")
+                time.sleep(sleep_time / 1000)
+                print(f" CS -> {self.__mapid()}")
                 self.__release()
-                continue
-
-            # Occasionally serve requests to enter (
-            if random.choice([True, False]):
+            elif random.choice([True, False]):
                 self.__receive()
+        # while True:
+        #     # Enter the critical section if
+        #     # 1) there are more than one process left and
+        #     # 2) this peer has active behavior and
+        #     # 3) random is true
+        #     if len(self.all_processes) > 1 and \
+        #             self.peer_type == ACTIVE and \
+        #             random.choice([True, False]):
+        #         self.logger.debug("{} wants to ENTER CS at CLOCK {}."
+        #                           .format(self.__mapid(), self.clock))
+
+        #         self.__request_to_enter()
+        #         while not self.__allowed_to_enter():
+        #             self.__receive()
+
+        #         # Stay in CS for some time ...
+        #         sleep_time = random.randint(0, 2000)
+        #         self.logger.debug("{} enters CS for {} milliseconds."
+        #                           .format(self.__mapid(), sleep_time))
+        #         print(" CS <- {}".format(self.__mapid()))
+        #         time.sleep(sleep_time/1000)
+
+        #         # ... then leave CS
+        #         print(" CS -> {}".format(self.__mapid()))
+        #         self.__release()
+        #         continue
+
+        #     # Occasionally serve requests to enter (
+        #     if random.choice([True, False]):
+        #         self.__receive()
